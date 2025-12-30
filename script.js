@@ -6,7 +6,16 @@ let premioActual = null;
 let participantesDisponibles = [];
 let intentoActual = 1;
 const totalIntentos = 3;
-let ganadorTemporal = null; // Para almacenar el ganador temporal de los intentos "Al Agua"
+let ganadorTemporal = null;
+let animacionActiva = false;
+let intervaloAnimacion = null;
+let velocidadAnimacion = 80; // ms entre cambios (más bajo = más rápido)
+let velocidadInicial = 80;
+let velocidadFinal = 300;
+let progresoAnimacion = 0;
+let participantesParaAnimacion = [];
+let indiceAnimacionActual = 0;
+let duracionTotalAnimacion = 8000; // 8 segundos totales
 
 // Elementos DOM
 const excelFileInput = document.getElementById('excelFile');
@@ -34,6 +43,11 @@ const modalTitulo = document.getElementById('modalTitulo');
 const modalBody = document.getElementById('modalBody');
 const closeModal = document.querySelector('.close-modal');
 const fireworksCanvas = document.getElementById('fireworksCanvas');
+const animacionContainer = document.getElementById('animacionContainer');
+const animacionDisplay = document.getElementById('animacionDisplay');
+const participanteDestacado = document.getElementById('participanteDestacado');
+const progresoBar = document.getElementById('progresoBar');
+const iniciarAnimacionBtn = document.getElementById('iniciarAnimacionBtn');
 
 // Configuración de canvas para fuegos artificiales
 const ctx = fireworksCanvas.getContext('2d');
@@ -47,7 +61,8 @@ agregarPremioBtn.addEventListener('click', agregarPremio);
 premioInput.addEventListener('keypress', function(e) {
     if (e.key === 'Enter') agregarPremio();
 });
-sortearBtn.addEventListener('click', realizarSorteo);
+sortearBtn.addEventListener('click', iniciarProcesoSorteo);
+iniciarAnimacionBtn.addEventListener('click', iniciarAnimacionSorteo);
 nuevoPremioBtn.addEventListener('click', prepararNuevoPremio);
 resetBtn.addEventListener('click', reiniciarTodo);
 closeModal.addEventListener('click', cerrarModal);
@@ -252,11 +267,11 @@ function seleccionarPremioActual(premioId) {
     // Actualizar lista de premios
     mostrarPremios();
     
-    // Habilitar botón de sortear si hay participantes
-    sortearBtn.disabled = participantes.length === 0;
+    // Mostrar el contenedor de animación
+    animacionContainer.style.display = 'block';
     
     // Mostrar información
-    showInfo(`Listo para sortear: <strong>${premioActual.nombre}</strong>. Presione "Realizar Intento de Sorteo"`);
+    showInfo(`Listo para sortear: <strong>${premioActual.nombre}</strong>. Presione "Iniciar Animación de Sorteo"`);
 }
 
 // Actualizar la UI de los intentos
@@ -323,8 +338,8 @@ function mostrarParticipantes() {
     }
 }
 
-// Realizar el sorteo para el premio actual
-function realizarSorteo() {
+// Iniciar el proceso de sorteo (reemplaza a realizarSorteo)
+function iniciarProcesoSorteo() {
     // Validar que haya un premio seleccionado
     if (!premioActual) {
         showError('No hay un premio seleccionado. Agregue y seleccione un premio primero.');
@@ -337,28 +352,219 @@ function realizarSorteo() {
         return;
     }
     
-    let participanteSeleccionado;
+    // Mostrar el contenedor de animación
+    animacionContainer.style.display = 'block';
+    showInfo('Presione "Iniciar Animación de Sorteo" para comenzar el proceso de selección.');
+}
+
+// Iniciar la animación del sorteo
+function iniciarAnimacionSorteo() {
+    // Validar que haya un premio seleccionado
+    if (!premioActual) {
+        showError('No hay un premio seleccionado. Agregue y seleccione un premio primero.');
+        return;
+    }
     
-    // Si es el tercer intento (ganador válido), usar el participante seleccionado en intentos anteriores
+    // Validar que haya participantes disponibles
+    if (participantesDisponibles.length === 0) {
+        showError('No hay participantes disponibles para sortear. Reinicie el sorteo para comenzar de nuevo.');
+        return;
+    }
+    
+    // Si ya hay una animación activa, no hacer nada
+    if (animacionActiva) return;
+    
+    // Deshabilitar botones durante la animación
+    iniciarAnimacionBtn.disabled = true;
+    sortearBtn.disabled = true;
+    nuevoPremioBtn.disabled = true;
+    
+    // Preparar participantes para la animación
+    prepararParticipantesParaAnimacion();
+    
+    // Reiniciar variables de animación
+    animacionActiva = true;
+    progresoAnimacion = 0;
+    velocidadAnimacion = velocidadInicial;
+    indiceAnimacionActual = 0;
+    
+    // Mostrar primer participante
+    mostrarParticipanteEnAnimacion(0);
+    
+    // Iniciar barra de progreso
+    actualizarBarraProgreso(0);
+    
+    // Iniciar intervalo de animación
+    intervaloAnimacion = setInterval(avanzarAnimacion, velocidadAnimacion);
+    
+    // Iniciar el temporizador para ralentizar gradualmente
+    iniciarRalentizacion();
+    
+    showInfo('Animación de sorteo en progreso...');
+}
+
+// Preparar participantes para la animación
+function prepararParticipantesParaAnimacion() {
+    participantesParaAnimacion = [];
+    
+    // Si es el tercer intento y ya tenemos un ganador temporal, usarlo
     if (intentoActual === 3 && ganadorTemporal) {
-        participanteSeleccionado = ganadorTemporal;
+        participantesParaAnimacion = [ganadorTemporal];
+        // Agregar algunos participantes adicionales para la animación
+        for (let i = 0; i < 10; i++) {
+            const indiceAleatorio = Math.floor(Math.random() * participantesDisponibles.length);
+            if (participantesDisponibles[indiceAleatorio].id !== ganadorTemporal.id) {
+                participantesParaAnimacion.push(participantesDisponibles[indiceAleatorio]);
+            }
+        }
+        // Mezclar el array
+        participantesParaAnimacion = mezclarArray(participantesParaAnimacion);
+        // Asegurarse de que el ganador temporal esté en algún lugar del medio
+        const indiceGanador = Math.floor(participantesParaAnimacion.length / 2);
+        const indiceActual = participantesParaAnimacion.findIndex(p => p.id === ganadorTemporal.id);
+        if (indiceActual !== -1) {
+            [participantesParaAnimacion[indiceActual], participantesParaAnimacion[indiceGanador]] = 
+            [participantesParaAnimacion[indiceGanador], participantesParaAnimacion[indiceActual]];
+        }
     } else {
-        // Seleccionar un participante aleatorio
-        const indiceGanador = Math.floor(Math.random() * participantesDisponibles.length);
-        participanteSeleccionado = participantesDisponibles[indiceGanador];
+        // Para intentos 1 y 2, seleccionar participantes aleatorios
+        const participantesCopia = [...participantesDisponibles];
+        participantesParaAnimacion = mezclarArray(participantesCopia).slice(0, 15);
         
-        // Guardar el participante seleccionado para el tercer intento
-        if (intentoActual === 1 || intentoActual === 2) {
-            ganadorTemporal = participanteSeleccionado;
+        // Si es el primer intento, guardar el primer participante como temporal
+        if (intentoActual === 1) {
+            ganadorTemporal = participantesParaAnimacion[Math.floor(participantesParaAnimacion.length / 2)];
+        }
+        // Si es el segundo intento, usar el mismo ganador temporal
+        else if (intentoActual === 2 && ganadorTemporal) {
+            // Reemplazar un participante aleatorio con el ganador temporal
+            const indiceReemplazo = Math.floor(participantesParaAnimacion.length / 2);
+            participantesParaAnimacion[indiceReemplazo] = ganadorTemporal;
         }
     }
+}
+
+// Mezclar array (algoritmo de Fisher-Yates)
+function mezclarArray(array) {
+    const nuevoArray = [...array];
+    for (let i = nuevoArray.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [nuevoArray[i], nuevoArray[j]] = [nuevoArray[j], nuevoArray[i]];
+    }
+    return nuevoArray;
+}
+
+// Mostrar participante en la animación
+function mostrarParticipanteEnAnimacion(indice) {
+    if (indice >= participantesParaAnimacion.length) {
+        indice = 0;
+        indiceAnimacionActual = 0;
+    }
+    
+    const participante = participantesParaAnimacion[indice];
+    
+    // Actualizar el participante destacado
+    const participanteCodigo = participanteDestacado.querySelector('.participante-codigo');
+    const participanteNombre = participanteDestacado.querySelector('.participante-nombre');
+    
+    participanteCodigo.textContent = participante.codpersona;
+    participanteNombre.textContent = participante.datospersona;
+    
+    // Agregar efecto de entrada
+    participanteDestacado.classList.remove('saliendo');
+    void participanteDestacado.offsetWidth; // Forzar reflow para reiniciar animación
+    participanteDestacado.classList.add('destacado');
+}
+
+// Avanzar la animación
+function avanzarAnimacion() {
+    if (!animacionActiva) return;
+    
+    // Avanzar al siguiente participante
+    indiceAnimacionActual++;
+    if (indiceAnimacionActual >= participantesParaAnimacion.length) {
+        indiceAnimacionActual = 0;
+    }
+    
+    // Mostrar el participante actual
+    mostrarParticipanteEnAnimacion(indiceAnimacionActual);
+    
+    // Actualizar progreso
+    progresoAnimacion += (velocidadAnimacion / duracionTotalAnimacion) * 100;
+    actualizarBarraProgreso(progresoAnimacion);
+    
+    // Si hemos alcanzado el final de la animación
+    if (progresoAnimacion >= 100) {
+        finalizarAnimacion();
+    }
+}
+
+// Iniciar ralentización gradual de la animación
+function iniciarRalentizacion() {
+    const tiempoRalentizacion = duracionTotalAnimacion * 0.7; // Comenzar a ralentizar después del 70%
+    const incrementoVelocidad = (velocidadFinal - velocidadInicial) / (duracionTotalAnimacion * 0.3 / 100);
+    
+    let tiempoTranscurrido = 0;
+    const intervaloRalentizacion = setInterval(() => {
+        if (!animacionActiva) {
+            clearInterval(intervaloRalentizacion);
+            return;
+        }
+        
+        tiempoTranscurrido += 100;
+        
+        // Comenzar a ralentizar después del tiempo especificado
+        if (tiempoTranscurrido >= tiempoRalentizacion) {
+            velocidadAnimacion += incrementoVelocidad;
+            
+            // Ajustar el intervalo actual
+            clearInterval(intervaloAnimacion);
+            intervaloAnimacion = setInterval(avanzarAnimacion, velocidadAnimacion);
+            
+            // Si llegamos a la velocidad final, detener la ralentización
+            if (velocidadAnimacion >= velocidadFinal) {
+                clearInterval(intervaloRalentizacion);
+            }
+        }
+    }, 100);
+}
+
+// Actualizar barra de progreso
+function actualizarBarraProgreso(progreso) {
+    progresoBar.style.width = `${Math.min(progreso, 100)}%`;
+    
+    // Cambiar color de la barra según el progreso
+    if (progreso < 70) {
+        progresoBar.style.background = "linear-gradient(90deg, #00a859, #ffd100)";
+    } else if (progreso < 90) {
+        progresoBar.style.background = "linear-gradient(90deg, #ffd100, #ff8800)";
+    } else {
+        progresoBar.style.background = "linear-gradient(90deg, #ff8800, #ff4444)";
+    }
+}
+
+// Finalizar la animación y mostrar resultado
+function finalizarAnimacion() {
+    // Detener la animación
+    animacionActiva = false;
+    clearInterval(intervaloAnimacion);
+    
+    // Obtener el participante seleccionado (el que está actualmente visible)
+    const participanteSeleccionado = participantesParaAnimacion[indiceAnimacionActual];
     
     // Determinar si es un intento "Al Agua" o ganador válido
     const esAlAgua = intentoActual === 1 || intentoActual === 2;
     const esGanadorValido = intentoActual === 3;
     
-    // Mostrar resultado en modal
-    mostrarResultadoModal(participanteSeleccionado, esAlAgua, esGanadorValido);
+    // Guardar el participante como ganador temporal para los primeros intentos
+    if (esAlAgua) {
+        ganadorTemporal = participanteSeleccionado;
+    }
+    
+    // Mostrar resultado en modal después de un breve retraso
+    setTimeout(() => {
+        mostrarResultadoModal(participanteSeleccionado, esAlAgua, esGanadorValido);
+    }, 1000);
     
     // Si es ganador válido (tercer intento), procesar el premio
     if (esGanadorValido) {
@@ -394,15 +600,27 @@ function realizarSorteo() {
         iniciarFuegosArtificiales();
         
         showSuccess(`¡Premio "${premioActual.nombre}" sorteado! Ganador: ${participanteSeleccionado.datospersona}`);
+        
+        // Ocultar el contenedor de animación
+        setTimeout(() => {
+            animacionContainer.style.display = 'none';
+        }, 2000);
     } else {
         // Para intentos "Al Agua", solo mostrar el mensaje
         showInfo(`Intento ${intentoActual} completado (Al Agua). Siga con el siguiente intento.`);
     }
     
+    // Rehabilitar botones
+    iniciarAnimacionBtn.disabled = false;
+    nuevoPremioBtn.disabled = false;
+    
     // Incrementar el contador de intentos
     if (intentoActual < totalIntentos) {
         intentoActual++;
         actualizarIntentoUI();
+        
+        // Si todavía hay intentos, mantener habilitado el botón de sortear
+        sortearBtn.disabled = false;
     } else {
         // Si ya se completaron todos los intentos, deshabilitar el botón
         sortearBtn.disabled = true;
@@ -500,6 +718,15 @@ function mostrarGanadorEnLista(premio) {
 
 // Preparar para un nuevo premio (siguiente premio pendiente)
 function prepararNuevoPremio() {
+    // Detener cualquier animación en curso
+    if (animacionActiva) {
+        animacionActiva = false;
+        clearInterval(intervaloAnimacion);
+    }
+    
+    // Ocultar el contenedor de animación
+    animacionContainer.style.display = 'none';
+    
     // Buscar el siguiente premio pendiente
     const siguientePremio = premios.find(p => p.estado === 'pendiente');
     
@@ -518,6 +745,12 @@ function reiniciarTodo() {
         return;
     }
     
+    // Detener cualquier animación en curso
+    if (animacionActiva) {
+        animacionActiva = false;
+        clearInterval(intervaloAnimacion);
+    }
+    
     // Reiniciar variables
     participantes = [];
     premios = [];
@@ -526,6 +759,12 @@ function reiniciarTodo() {
     participantesDisponibles = [];
     intentoActual = 1;
     ganadorTemporal = null;
+    animacionActiva = false;
+    intervaloAnimacion = null;
+    velocidadAnimacion = velocidadInicial;
+    progresoAnimacion = 0;
+    participantesParaAnimacion = [];
+    indiceAnimacionActual = 0;
     
     // Limpiar interfaz
     premiosList.innerHTML = '';
@@ -538,6 +777,10 @@ function reiniciarTodo() {
         </div>
     `;
     
+    // Limpiar animación
+    animacionContainer.style.display = 'none';
+    progresoBar.style.width = '0%';
+    
     // Limpiar input de archivo
     excelFileInput.value = '';
     premioInput.value = '';
@@ -549,8 +792,10 @@ function reiniciarTodo() {
     // Actualizar UI de intentos
     actualizarIntentoUI();
     
-    // Deshabilitar botón de sortear
+    // Rehabilitar botones
+    iniciarAnimacionBtn.disabled = false;
     sortearBtn.disabled = true;
+    nuevoPremioBtn.disabled = false;
     
     // Limpiar alertas
     hideAlerts();

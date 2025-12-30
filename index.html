@@ -97,6 +97,28 @@
                     </div>
                 </div>
                 
+                <!-- Contenedor para la animación del sorteo -->
+                <div class="animacion-sorteo-container" id="animacionContainer">
+                    <div class="animacion-header">
+                        <h3><i class="fas fa-spinner"></i> Seleccionando ganador...</h3>
+                        <div class="animacion-progreso">
+                            <div class="progreso-bar" id="progresoBar"></div>
+                        </div>
+                    </div>
+                    <div class="animacion-display" id="animacionDisplay">
+                        <!-- Los participantes en movimiento se mostrarán aquí -->
+                        <div class="participante-animado destacado" id="participanteDestacado">
+                            <div class="participante-codigo">CP000</div>
+                            <div class="participante-nombre">Nombre del participante</div>
+                        </div>
+                    </div>
+                    <div class="animacion-controles">
+                        <button id="iniciarAnimacionBtn" class="btn btn-animar">
+                            <i class="fas fa-play"></i> Iniciar Animación de Sorteo
+                        </button>
+                    </div>
+                </div>
+                
                 <div class="sorteo-actions">
                     <button id="sortearBtn" class="btn btn-sortear">
                         <i class="fas fa-dice"></i> Realizar Intento de Sorteo
